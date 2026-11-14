@@ -1,7 +1,7 @@
 #!/usr/bin/env kotlin
 // Генератор кадров bootanimation: байкер въезжает слева, тормозит и “едет на месте”.
 // Запуск: kotlin bootanim-gen.main.kts <картинка.png> <папка-вывода>
-// В папке появятся desc.txt, part0/ (въезд, 30 кадров) и part1/ (цикл, 30 кадров).
+// В папке появятся desc.txt, part0/ (въезд и надпись, 45 кадров) и part1/ (цикл, 30 кадров).
 // Упаковка без сжатия:  cd <папка-вывода> && zip -0 -q -X -r ../bootanimation.zip desc.txt part0 part1
 
 import java.awt.BasicStroke
@@ -58,7 +58,60 @@ fun speedLines(g: java.awt.Graphics2D, x0: Double, y0: Double, phase: Double, al
     }
 }
 
-fun frame(dx: Double, dy: Double, angleDeg: Double, phase: Double, linesAlpha: Double, textAlpha: Double): BufferedImage {
+val red = Color(0xE5, 0x39, 0x35)
+val TEXT = "red_byte"
+fun lerp(a: Double, b: Double, t: Double) = a + (b - a) * t
+fun mix(c1: Color, c2: Color, t: Double) = Color(
+    lerp(c1.red.toDouble(), c2.red.toDouble(), t).toInt(),
+    lerp(c1.green.toDouble(), c2.green.toDouble(), t).toInt(),
+    lerp(c1.blue.toDouble(), c2.blue.toDouble(), t).toInt())
+fun smooth(t: Double) = t.coerceIn(0.0, 1.0).let { it * it * (3 - 2 * it) }
+
+// Надпись во время въезда: сначала красная “R”, потом из неё по буквам
+// расползаются в стороны буквы red_byte и по дороге зеленеют.
+// s: 0..0.3 “R” проявляется, 0.3..1 буквы разъезжаются по местам.
+fun intro(g: java.awt.Graphics2D, s: Double) {
+    g.font = font
+    val fm = g.fontMetrics
+    val baseline = H - 150
+    val total = fm.stringWidth(TEXT)
+    val left = (W - total) / 2.0
+    val center = W / 2.0
+    if (s < 0.3) {
+        val a = smooth(s / 0.3)
+        val big = font.deriveFont((104 * lerp(1.6, 1.25, a)).toFloat())
+        g.font = big
+        val w = g.fontMetrics.stringWidth("R")
+        g.color = Color(red.red, red.green, red.blue, (255 * a).toInt())
+        g.drawString("R", (center - w / 2).toFloat(), baseline.toFloat())
+        return
+    }
+    val k = smooth((s - 0.3) / 0.7)
+    // “R” гаснет и сжимается, пока буквы выезжают
+    if (k < 1) {
+        g.font = font.deriveFont((104 * 1.25 * (1 - 0.5 * k)).toFloat())
+        val w = g.fontMetrics.stringWidth("R")
+        g.color = Color(red.red, red.green, red.blue, (255 * (1 - k)).toInt())
+        g.drawString("R", (center - w / 2).toFloat(), baseline.toFloat())
+    }
+    g.font = font
+    var x = left
+    for (ch in TEXT) {
+        val cw = fm.charWidth(ch)
+        val targetCenter = x + cw / 2.0
+        // каждая буква стартует из центра; дальние начинают чуть позже
+        val delay = kotlin.math.abs(targetCenter - center) / (total / 2.0) * 0.25
+        val kk = smooth((k - delay) / (1 - delay))
+        val cx = lerp(center, targetCenter, kk)
+        val c = mix(red, green, kk)
+        g.color = Color(c.red, c.green, c.blue, (255 * smooth(kk * 3)).toInt())
+        g.drawString(ch.toString(), (cx - cw / 2).toFloat(), baseline.toFloat())
+        x += cw
+    }
+}
+
+fun frame(dx: Double, dy: Double, angleDeg: Double, phase: Double, linesAlpha: Double, textAlpha: Double,
+          introStep: Double? = null): BufferedImage {
     val img = BufferedImage(W, H, BufferedImage.TYPE_INT_RGB)   // фон чёрный, как у экрана загрузки
     val g = img.createGraphics()
     g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
@@ -72,7 +125,9 @@ fun frame(dx: Double, dy: Double, angleDeg: Double, phase: Double, linesAlpha: D
     g.rotate(-angleDeg * PI / 180)
     g.drawImage(disc, (-D / 2).toInt(), (-D / 2).toInt(), D.toInt(), D.toInt(), null)
     g.transform = saved
-    if (textAlpha > 0) {
+    if (introStep != null) {
+        intro(g, introStep)
+    } else if (textAlpha > 0) {
         g.font = font
         g.color = Color(green.red, green.green, green.blue, (255 * textAlpha.coerceIn(0.0, 1.0)).toInt())
         val text = "red_byte"
@@ -88,13 +143,20 @@ fun save(img: BufferedImage, part: String, i: Int) {
     ImageIO.write(img, "png", File(dir, "%05d.png".format(i)))
 }
 
-// part0: въезд слева за 1 секунду, торможение с лёгким клевком вперёд
-for (i in 0 until FPS) {
-    val t = i / (FPS - 1.0)
-    val e = 1 - (1 - t).pow(3)                         // ease-out
+// part0 (1,5 с): за первую секунду байкер въезжает слева и тормозит с лёгким клевком,
+// а под ним красная “R” по буквам расползается в зелёную надпись red_byte
+val INTRO = FPS * 3 / 2
+for (i in 0 until INTRO) {
+    val t = (i / (FPS - 1.0)).coerceAtMost(1.0)            // фаза въезда
+    val e = 1 - (1 - t).pow(3)                            // ease-out
     val dx = -(W / 2.0 + D / 2 + 40) * (1 - e)
-    val lean = if (t < 0.85) -6 * (1 - t / 0.85) else 2.5 * sin((t - 0.85) / 0.15 * PI)
-    save(frame(dx, 0.0, lean, i / 10.0, 1 - t * 0.4, max(0.0, (t - 0.6) / 0.4)), "part0", i)
+    val lean = when {
+        t < 0.85 -> -6 * (1 - t / 0.85)
+        t < 1.0 -> 2.5 * sin((t - 0.85) / 0.15 * PI)
+        else -> 0.0
+    }
+    val s = i / (INTRO - 1.0)                             // фаза надписи
+    save(frame(dx, 0.0, lean, i / 10.0, 1 - t * 0.4, 1.0, introStep = s), "part0", i)
 }
 // part1: “едет на месте”, бесшовный цикл
 for (i in 0 until FPS) {
