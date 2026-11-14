@@ -1,0 +1,18 @@
+# Параметры ART навсегда, через make-файл продукта (device/generic/goldfish).
+# Пересобрать только vendor/build.prop (в Android 17 его делает Make, цель задаётся путём):
+#   m out/target/product/emu64a/vendor/build.prop
+# Залить: adb root && adb remount && adb push .../vendor/build.prop /vendor/build.prop && adb reboot
+diff --git a/64bitonly/product/sdk_phone64_arm64.mk b/64bitonly/product/sdk_phone64_arm64.mk
+--- a/64bitonly/product/sdk_phone64_arm64.mk
++++ b/64bitonly/product/sdk_phone64_arm64.mk
+@@ -37,3 +37,10 @@ PRODUCT_BRAND := Android
+ PRODUCT_NAME := sdk_phone64_arm64
+ PRODUCT_DEVICE := emu64a
+ PRODUCT_MODEL := Android SDK built for arm64
++
++# Тюнинг ART по умолчанию для всей ОС.
++# "=" сильнее, чем "?=" из frameworks/native/build/phone-xhdpi-2048-dalvik-heap.mk
++PRODUCT_VENDOR_PROPERTIES += \
++    dalvik.vm.heapgrowthlimit=256m \
++    dalvik.vm.heapstartsize=16m \
++    dalvik.vm.heaptargetutilization=0.6
