@@ -11,6 +11,6 @@ echo "sync start $(date -Is)"
 /usr/bin/time -v repo sync -c -j8
 echo "sync rc=$? $(date -Is)"
 
-# Повтор для упавших (prebuilts/tools и system/extras проходят со второго раза):
+# Повтор для упавших
 repo sync -c -j2 prebuilts/tools system/extras
 du -sh ~/aosp
