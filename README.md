@@ -1,8 +1,6 @@
 # AOSP on apple silicon (red_byte edition)
 
-Скрипты к статье “Сборка AOSP на MacBook, или Приключения Android-разработчика” на Хабре: ССЫЛКА_НА_СТАТЬЮ
-
-Лицензия: MIT [LICENSE](LICENSE).
+Скрипты к статье “Сборка AOSP на MacBook, или Приключения Android-разработчика” на [Хабре](https://habr.com/ru/articles/1107948/):
 
 Сборка AOSP (Android 17) на Mac с Apple Silicon и запуск собственного образа в эмуляторе Android Studio. Бесплатно, без облака и отдельного Linux-компьютера.
 
